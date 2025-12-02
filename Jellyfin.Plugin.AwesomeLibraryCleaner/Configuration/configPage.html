@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Awesome Library Cleaner</title>
+    <style>
+        .library-section {
+            border: 1px solid #444;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 5px;
+            background-color: #1c1c1c;
+        }
+        .library-header {
+            font-size: 1.2em;
+            font-weight: bold;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #444;
+        }
+        .settings-row {
+            margin: 10px 0;
+        }
+        .hidden {
+            display: none;
+        }
+        .warning-text {
+            color: #ff9800;
+            font-size: 0.9em;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div id="ALCConfigPage" data-role="page" class="page type-interior pluginConfigurationPage" data-require="emby-input,emby-button,emby-select,emby-checkbox">
+        <div data-role="content">
+            <div class="content-primary">
+                <div style="margin-bottom: 20px; padding: 10px; background-color: #1c1c1c; border: 1px solid #444; border-radius: 5px;">
+                    <h2 style="margin-top: 0;">Awesome Library Cleaner</h2>
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <a is="emby-linkbutton" href="configurationpage?name=Awesome%20Library%20Cleaner" class="raised emby-button">
+                            <span>Configuration</span>
+                        </a>
+                        <a is="emby-linkbutton" href="configurationpage?name=Library%20Cleanup" class="raised emby-button">
+                            <span>Library Cleanup</span>
+                        </a>
+                        <button id="runCleanupButton" is="emby-button" type="button" class="raised button-submit emby-button" onclick="runCleanupNow(this)">
+                            <span>Run Cleanup Now</span>
+                        </button>
+                    </div>
+                </div>
+                <form id="ALCConfigForm">
+                    <div id="librariesContainer">
+                        <p>Loading libraries...</p>
+                    </div>
+                    <div style="margin-top: 20px;">
+                        <button is="emby-button" type="submit" class="raised button-submit block emby-button">
+                            <span>Save</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        <script type="text/javascript">
+            var ALCConfig = {
+                pluginUniqueId: 'eede8c45-dff4-4aee-8d7a-f5972a91348e'
+            };
+
+            function runCleanupNow(button) {
+                if (!confirm('This will run the cleanup task now. This may take some time depending on your library size. Continue?')) {
+                    return;
+                }
+
+                var originalText = button.querySelector('span').textContent;
+                button.disabled = true;
+                button.querySelector('span').textContent = 'Running...';
+
+                // First, get all scheduled tasks to find our task ID
+                ApiClient.getJSON(ApiClient.getUrl('ScheduledTasks')).then(function(tasks) {
+                    var cleanupTask = tasks.find(function(task) {
+                        return task.Key === 'AwesomeLibraryCleanerTask';
+                    });
+
+                    if (!cleanupTask) {
+                        button.disabled = false;
+                        button.querySelector('span').textContent = originalText;
+                        Dashboard.alert('Could not find the cleanup task. Please try again or check the Scheduled Tasks page.');
+                        return;
+                    }
+
+                    // Now trigger the task using its ID
+                    return ApiClient.ajax({
+                        type: 'POST',
+                        url: ApiClient.getUrl('ScheduledTasks/Running/' + cleanupTask.Id),
+                        contentType: 'application/json'
+                    });
+                }).then(function() {
+                    button.disabled = false;
+                    button.querySelector('span').textContent = originalText;
+                    Dashboard.alert('Cleanup task has been started. You can monitor progress in Dashboard → Scheduled Tasks.');
+                }).catch(function(error) {
+                    console.error('Error starting cleanup task:', error);
+                    button.disabled = false;
+                    button.querySelector('span').textContent = originalText;
+                    Dashboard.alert('Failed to start cleanup task. Please try again or check the Scheduled Tasks page.');
+                });
+            }
+
+            function mapTimeReferenceToValue(timeRef) {
+                // Handle both numeric values and string enum names
+                if (typeof timeRef === 'number') {
+                    return timeRef;
+                }
+
+                // Map enum string names to numeric values
+                switch (timeRef) {
+                    case 'FileAddedDate':
+                        return 0;
+                    case 'LatestFileUpdateDate':
+                        return 1;
+                    case 'LatestWatchDate':
+                        return 2;
+                    default:
+                        return 0;
+                }
+            }
+
+            function mapElementReferenceToValue(elementRef) {
+                // Handle both numeric values and string enum names
+                if (typeof elementRef === 'number') {
+                    return elementRef;
+                }
+
+                // Map enum string names to numeric values
+                switch (elementRef) {
+                    case 'Episode':
+                        return 0;
+                    case 'Season':
+                        return 1;
+                    case 'WholeSeries':
+                        return 2;
+                    default:
+                        return 2;
+                }
+            }
+
+            function createLibrarySection(library, settings) {
+                const isMovieOrTv = library.CollectionType === 'movies' || library.CollectionType === 'tvshows';
+                const isTvShows = library.CollectionType === 'tvshows';
+
+                if (!isMovieOrTv) {
+                    return '';
+                }
+
+                const libraryId = library.Id;
+                const enabled = settings ? settings.Enabled : false;
+                const timeRef = settings ? mapTimeReferenceToValue(settings.TimeReferenceOption) : 0;
+                const leavingSoonDays = settings ? settings.LeavingSoonDays : 0;
+                const leavingSoonName = settings ? settings.LeavingSoonCollectionName : 'Leaving Soon';
+                const deletionDays = settings ? settings.DeletionDays : 0;
+                const deleteAuto = settings ? settings.DeleteAutomation : false;
+                const excludeFavs = settings ? (settings.ExcludeFavorites !== false) : true;
+                const elementRef = settings ? mapElementReferenceToValue(settings.ElementReferenceOption) : 2;
+
+                return '<div class="library-section" data-library-id="' + libraryId + '">' +
+                    '<h1 class="library-header">' + library.Name + ' (' + library.CollectionType + ')</h1>' +
+                    '<div class="checkboxContainer checkboxContainer-withDescription">' +
+                    '<label class="emby-checkbox-label">' +
+                    '<input class="library-enabled" type="checkbox" is="emby-checkbox" ' + (enabled ? 'checked' : '') + ' />' +
+                    '<span>Use Awesome Library Cleaner on this library</span>' +
+                    '</label></div>' +
+                    '<div class="library-settings ' + (enabled ? '' : 'hidden') + '">' +
+                    '<div class="selectContainer settings-row">' +
+                    '<label class="selectLabel">Time Reference</label>' +
+                    '<select class="library-time-ref emby-select-withcolor emby-select" is="emby-select">' +
+                    '<option value="0" ' + (timeRef === 0 ? 'selected' : '') + '>File Added Date</option>' +
+                    '<option value="1" ' + (timeRef === 1 ? 'selected' : '') + '>Latest File Update Date</option>' +
+                    '<option value="2" ' + (timeRef === 2 ? 'selected' : '') + '>Latest Watch Date</option>' +
+                    '</select><div class="fieldDescription">The date used for period calculations</div></div>' +
+                    '<div class="inputContainer settings-row">' +
+                    '<label class="inputLabel inputLabelUnfocused">Leaving Soon After (Days)</label>' +
+                    '<input class="library-leaving-days" type="number" is="emby-input" min="0" value="' + leavingSoonDays + '" />' +
+                    '<div class="fieldDescription">Set to 0 to disable leaving soon collection</div></div>' +
+                    '<div class="inputContainer settings-row">' +
+                    '<label class="inputLabel inputLabelUnfocused">Leaving Soon Collection Name</label>' +
+                    '<input class="library-leaving-name" type="text" is="emby-input" value="' + leavingSoonName + '" />' +
+                    '<div class="fieldDescription">Display name for the leaving soon collection</div></div>' +
+                    '<div class="inputContainer settings-row">' +
+                    '<label class="inputLabel inputLabelUnfocused">Delete After (Days)</label>' +
+                    '<input class="library-deletion-days" type="number" is="emby-input" min="0" value="' + deletionDays + '" />' +
+                    '<div class="fieldDescription">Must be >= leaving soon days</div></div>' +
+                    '<div class="checkboxContainer checkboxContainer-withDescription settings-row">' +
+                    '<label class="emby-checkbox-label">' +
+                    '<input class="library-delete-auto" type="checkbox" is="emby-checkbox" ' + (deleteAuto ? 'checked' : '') + ' />' +
+                    '<span>Enable Delete Automation</span></label>' +
+                    '<div class="fieldDescription">If disabled, items will be added to "To Delete" collection for manual review</div></div>' +
+                    '<div class="checkboxContainer checkboxContainer-withDescription settings-row">' +
+                    '<label class="emby-checkbox-label">' +
+                    '<input class="library-exclude-favs" type="checkbox" is="emby-checkbox" ' + (excludeFavs ? 'checked' : '') + ' />' +
+                    '<span>Exclude Favorites</span></label>' +
+                    '<div class="fieldDescription">Prevent user favorites from being cleaned</div></div>' +
+                    (isTvShows ? '<div class="selectContainer settings-row">' +
+                    '<label class="selectLabel">Element Reference (TV Shows Only)</label>' +
+                    '<select class="library-element-ref emby-select-withcolor emby-select" is="emby-select">' +
+                    '<option value="0" ' + (elementRef === 0 ? 'selected' : '') + '>Per Episode</option>' +
+                    '<option value="1" ' + (elementRef === 1 ? 'selected' : '') + '>Per Season</option>' +
+                    '<option value="2" ' + (elementRef === 2 ? 'selected' : '') + '>Whole Series</option>' +
+                    '</select><div class="fieldDescription">Determines the granularity of cleanup</div></div>' : '') +
+                    '</div></div>';
+            }
+
+            function toggleLibrarySettings() {
+                document.querySelectorAll('.library-section').forEach(function(section) {
+                    var checkbox = section.querySelector('.library-enabled');
+                    var settings = section.querySelector('.library-settings');
+                    if (checkbox && settings) {
+                        if (checkbox.checked) {
+                            settings.classList.remove('hidden');
+                        } else {
+                            settings.classList.add('hidden');
+                        }
+                    }
+                });
+            }
+
+            document.querySelector('#ALCConfigPage')
+                .addEventListener('pageshow', function() {
+                    Dashboard.showLoadingMsg();
+
+                    Promise.all([
+                        ApiClient.getJSON(ApiClient.getUrl('Library/MediaFolders')),
+                        ApiClient.getPluginConfiguration(ALCConfig.pluginUniqueId)
+                    ]).then(function(results) {
+                        var libraries = results[0].Items;
+                        var config = results[1];
+                        var container = document.querySelector('#librariesContainer');
+                        container.innerHTML = '';
+
+                        if (libraries && libraries.length > 0) {
+                            libraries.forEach(function(library) {
+                                var settings = config.LibrarySettings ? config.LibrarySettings.find(function(s) { return s.LibraryId === library.Id; }) : null;
+                                var html = createLibrarySection(library, settings);
+                                if (html) {
+                                    container.innerHTML += html;
+                                }
+                            });
+
+                            document.querySelectorAll('.library-enabled').forEach(function(checkbox) {
+                                checkbox.addEventListener('change', toggleLibrarySettings);
+                            });
+                        } else {
+                            container.innerHTML = '<p>No libraries found.</p>';
+                        }
+                        Dashboard.hideLoadingMsg();
+                    }).catch(function(error) {
+                        console.error('Error loading libraries:', error);
+                        Dashboard.hideLoadingMsg();
+                        Dashboard.alert('Failed to load libraries. Please refresh the page.');
+                    });
+                });
+
+            document.querySelector('#ALCConfigForm')
+                .addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    Dashboard.showLoadingMsg();
+
+                    ApiClient.getPluginConfiguration(ALCConfig.pluginUniqueId).then(function(config) {
+                        config.LibrarySettings = [];
+
+                        document.querySelectorAll('.library-section').forEach(function(section) {
+                            var libraryId = section.getAttribute('data-library-id');
+                            var enabled = section.querySelector('.library-enabled').checked;
+
+                            if (enabled) {
+                                var timeRef = parseInt(section.querySelector('.library-time-ref').value);
+                                var leavingDays = parseInt(section.querySelector('.library-leaving-days').value);
+                                var leavingName = section.querySelector('.library-leaving-name').value;
+                                var deletionDays = parseInt(section.querySelector('.library-deletion-days').value);
+                                var deleteAuto = section.querySelector('.library-delete-auto').checked;
+                                var excludeFavs = section.querySelector('.library-exclude-favs').checked;
+                                var elementRefEl = section.querySelector('.library-element-ref');
+                                var elementRef = elementRefEl ? parseInt(elementRefEl.value) : 2;
+
+                                // Only validate if both are enabled (> 0)
+                                if (leavingDays > 0 && deletionDays > 0 && deletionDays < leavingDays) {
+                                    Dashboard.hideLoadingMsg();
+                                    Dashboard.alert('Deletion days must be >= leaving soon days when both are enabled for library: ' + libraryId);
+                                    return false;
+                                }
+
+                                // Find existing settings or create new
+                                var existingIndex = config.LibrarySettings.findIndex(function(s) { return s.LibraryId === libraryId; });
+                                var settings = {
+                                    LibraryId: libraryId,
+                                    LibraryName: '',
+                                    Enabled: enabled,
+                                    TimeReferenceOption: timeRef,
+                                    LeavingSoonDays: leavingDays,
+                                    LeavingSoonCollectionName: leavingName,
+                                    DeletionDays: deletionDays,
+                                    DeleteAutomation: deleteAuto,
+                                    ExcludeFavorites: excludeFavs,
+                                    ElementReferenceOption: elementRef
+                                };
+
+                                if (existingIndex >= 0) {
+                                    config.LibrarySettings[existingIndex] = settings;
+                                } else {
+                                    config.LibrarySettings.push(settings);
+                                }
+                            }
+                        });
+
+                        ApiClient.updatePluginConfiguration(ALCConfig.pluginUniqueId, config).then(function(result) {
+                            Dashboard.processPluginConfigurationUpdateResult(result);
+                        });
+                    });
+
+                    return false;
+                });
+        </script>
+    </div>
+</body>
+</html>

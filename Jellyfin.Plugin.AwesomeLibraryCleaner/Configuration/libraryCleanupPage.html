@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Library Cleanup - Awesome Library Cleaner</title>
+    <style>
+        .cleanup-section {
+            border: 1px solid #444;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 5px;
+            background-color: #1c1c1c;
+        }
+        .section-header {
+            font-size: 1.2em;
+            font-weight: bold;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #444;
+        }
+        .media-item {
+            padding: 10px;
+            margin: 5px 0;
+            background-color: #2a2a2a;
+            border-radius: 3px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .media-item:hover {
+            background-color: #333;
+        }
+        .media-info {
+            flex-grow: 1;
+        }
+        .media-actions {
+            display: flex;
+            gap: 10px;
+        }
+        .warning-box {
+            background-color: #ff9800;
+            color: #000;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        .empty-message {
+            text-align: center;
+            padding: 20px;
+            color: #888;
+        }
+    </style>
+</head>
+<body>
+    <div id="LibraryCleanupPage" data-role="page" class="page type-interior pluginConfigurationPage" data-require="emby-button">
+        <div data-role="content">
+            <div class="content-primary">
+                <div style="margin-bottom: 20px; padding: 10px; background-color: #1c1c1c; border: 1px solid #444; border-radius: 5px;">
+                    <h2 style="margin-top: 0;">Awesome Library Cleaner</h2>
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <a is="emby-linkbutton" href="configurationpage?name=Awesome%20Library%20Cleaner" class="raised emby-button">
+                            <span>Configuration</span>
+                        </a>
+                        <a is="emby-linkbutton" href="configurationpage?name=Library%20Cleanup" class="raised emby-button">
+                            <span>Library Cleanup</span>
+                        </a>
+                        <button id="runCleanupButton" is="emby-button" type="button" class="raised button-submit emby-button" onclick="runCleanupNow(this)">
+                            <span>Run Cleanup Now</span>
+                        </button>
+                    </div>
+                </div>
+                <h1>Library Cleanup - Manual Deletion</h1>
+                <p>This page shows media items pending deletion. Items are in "To Delete" collections from libraries where automatic deletion is disabled.</p>
+
+                <div class="warning-box">
+                    WARNING: Deleting items here will permanently remove the media files from your system!
+                </div>
+
+                <div style="margin-bottom: 20px;">
+                    <button id="refreshButton" is="emby-button" type="button" class="raised emby-button" onclick="loadPendingDeletions()">
+                        <span>Refresh</span>
+                    </button>
+                    <button id="deleteSelectedButton" is="emby-button" type="button" class="raised button-submit emby-button" onclick="deleteSelectedItems()">
+                        <span>Delete Selected</span>
+                    </button>
+                </div>
+
+                <div id="cleanupContainer">
+                    <p class="empty-message">Loading...</p>
+                </div>
+            </div>
+        </div>
+        <script type="text/javascript">
+            var selectedItems = new Set();
+
+            function runCleanupNow(button) {
+                if (!confirm('This will run the cleanup task now. This may take some time depending on your library size. Continue?')) {
+                    return;
+                }
+
+                var originalText = button.querySelector('span').textContent;
+                button.disabled = true;
+                button.querySelector('span').textContent = 'Running...';
+
+                // First, get all scheduled tasks to find our task ID
+                ApiClient.getJSON(ApiClient.getUrl('ScheduledTasks')).then(function(tasks) {
+                    var cleanupTask = tasks.find(function(task) {
+                        return task.Key === 'AwesomeLibraryCleanerTask';
+                    });
+
+                    if (!cleanupTask) {
+                        button.disabled = false;
+                        button.querySelector('span').textContent = originalText;
+                        Dashboard.alert('Could not find the cleanup task. Please try again or check the Scheduled Tasks page.');
+                        return;
+                    }
+
+                    // Now trigger the task using its ID
+                    return ApiClient.ajax({
+                        type: 'POST',
+                        url: ApiClient.getUrl('ScheduledTasks/Running/' + cleanupTask.Id),
+                        contentType: 'application/json'
+                    });
+                }).then(function() {
+                    button.disabled = false;
+                    button.querySelector('span').textContent = originalText;
+                    Dashboard.alert('Cleanup task has been started. You can monitor progress in Dashboard → Scheduled Tasks.');
+                    // Refresh the pending deletions list after a short delay
+                    setTimeout(function() {
+                        loadPendingDeletions();
+                    }, 2000);
+                }).catch(function(error) {
+                    console.error('Error starting cleanup task:', error);
+                    button.disabled = false;
+                    button.querySelector('span').textContent = originalText;
+                    Dashboard.alert('Failed to start cleanup task. Please try again or check the Scheduled Tasks page.');
+                });
+            }
+
+            function toggleSelection(itemId, checkbox) {
+                if (checkbox.checked) {
+                    selectedItems.add(itemId);
+                } else {
+                    selectedItems.delete(itemId);
+                }
+                updateDeleteButton();
+            }
+
+            function updateDeleteButton() {
+                var button = document.querySelector('#deleteSelectedButton');
+                button.disabled = selectedItems.size === 0;
+                button.querySelector('span').textContent = 'Delete Selected (' + selectedItems.size + ')';
+            }
+
+            function formatDaysAgo(dateString) {
+                var date = new Date(dateString);
+                var now = new Date();
+                var diffMs = now - date;
+                var diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+                if (diffDays === 0) {
+                    return 'Today';
+                } else if (diffDays === 1) {
+                    return '1 day ago';
+                } else {
+                    return diffDays + ' days ago';
+                }
+            }
+
+            function createMediaSection(libraryId, libraryName, items) {
+                if (!items || items.length === 0) {
+                    return '';
+                }
+
+                var html = '<div class="cleanup-section">' +
+                    '<div class="section-header">' + libraryName + ' - ' + items.length + ' items pending deletion</div>';
+
+                items.forEach(function(item) {
+                    var dateInfo = '';
+                    if (item.DateCreated) {
+                        dateInfo = '<br><span style="font-size: 0.9em; color: #888;">' +
+                            'Added: ' + formatDaysAgo(item.DateCreated) + ' | ' +
+                            'Modified: ' + formatDaysAgo(item.DateModified) + ' | ' +
+                            'Watched: ' + formatDaysAgo(item.DateLastSaved) +
+                            '</span>';
+                    }
+
+                    html += '<div class="media-item">' +
+                        '<label class="emby-checkbox-label" style="flex-grow: 1; cursor: pointer;">' +
+                        '<input type="checkbox" is="emby-checkbox" class="item-checkbox" data-item-id="' + item.ItemId + '" /> ' +
+                        '<span class="media-info">' + item.Name + dateInfo + '</span>' +
+                        '</label>' +
+                        '<div class="media-actions">' +
+                        '<button class="delete-single-btn raised emby-button" is="emby-button" data-item-id="' + item.ItemId + '" data-name="' + item.Name + '">' +
+                        '<span>Delete</span>' +
+                        '</button>' +
+                        '</div>' +
+                        '</div>';
+                });
+
+                html += '</div>';
+                return html;
+            }
+
+            function loadPendingDeletions() {
+                Dashboard.showLoadingMsg();
+                selectedItems.clear();
+
+                ApiClient.getJSON(ApiClient.getUrl('AwesomeLibraryCleaner/PendingDeletions'))
+                    .then(function(data) {
+                        var container = document.querySelector('#cleanupContainer');
+                        container.innerHTML = '';
+
+                        if (data && data.Libraries && data.Libraries.length > 0) {
+                            data.Libraries.forEach(function(library) {
+                                var html = createMediaSection(library.LibraryId, library.LibraryName, library.Items);
+                                if (html) {
+                                    container.innerHTML += html;
+                                }
+                            });
+
+                            // Add event listeners for checkboxes
+                            document.querySelectorAll('.item-checkbox').forEach(function(checkbox) {
+                                checkbox.addEventListener('change', function() {
+                                    toggleSelection(this.getAttribute('data-item-id'), this);
+                                });
+                            });
+
+                            // Add event listeners for single delete buttons
+                            document.querySelectorAll('.delete-single-btn').forEach(function(button) {
+                                button.addEventListener('click', function() {
+                                    var itemId = this.getAttribute('data-item-id');
+                                    var name = this.getAttribute('data-name');
+                                    deleteSingleItem(itemId, name);
+                                });
+                            });
+                        } else {
+                            container.innerHTML = '<p class="empty-message">No items pending deletion.</p>';
+                        }
+
+                        updateDeleteButton();
+                        Dashboard.hideLoadingMsg();
+                    })
+                    .catch(function(error) {
+                        console.error('Error loading pending deletions:', error);
+                        Dashboard.hideLoadingMsg();
+                        Dashboard.alert('Failed to load pending deletions. Please try again.');
+                    });
+            }
+
+            function deleteSingleItem(itemId, name) {
+                if (!confirm('Are you sure you want to permanently delete "' + name + '"? This will remove the media file!')) {
+                    return;
+                }
+
+                Dashboard.showLoadingMsg();
+                ApiClient.ajax({
+                    type: 'POST',
+                    url: ApiClient.getUrl('AwesomeLibraryCleaner/Delete'),
+                    data: JSON.stringify({ ItemIds: [itemId] }),
+                    contentType: 'application/json'
+                }).then(function() {
+                    Dashboard.hideLoadingMsg();
+                    Dashboard.alert('Item deleted successfully.');
+                    loadPendingDeletions();
+                }).catch(function(error) {
+                    console.error('Error deleting item:', error);
+                    Dashboard.hideLoadingMsg();
+                    Dashboard.alert('Failed to delete item. Please try again.');
+                });
+            }
+
+            function deleteSelectedItems() {
+                if (selectedItems.size === 0) {
+                    return;
+                }
+
+                if (!confirm('Are you sure you want to permanently delete ' + selectedItems.size + ' items? This will remove the media files!')) {
+                    return;
+                }
+
+                Dashboard.showLoadingMsg();
+                ApiClient.ajax({
+                    type: 'POST',
+                    url: ApiClient.getUrl('AwesomeLibraryCleaner/Delete'),
+                    data: JSON.stringify({ ItemIds: Array.from(selectedItems) }),
+                    contentType: 'application/json'
+                }).then(function() {
+                    Dashboard.hideLoadingMsg();
+                    Dashboard.alert('Items deleted successfully.');
+                    loadPendingDeletions();
+                }).catch(function(error) {
+                    console.error('Error deleting items:', error);
+                    Dashboard.hideLoadingMsg();
+                    Dashboard.alert('Failed to delete items. Please try again.');
+                });
+            }
+
+            document.querySelector('#LibraryCleanupPage')
+                .addEventListener('pageshow', function() {
+                    loadPendingDeletions();
+                });
+        </script>
+    </div>
+</body>
+</html>
