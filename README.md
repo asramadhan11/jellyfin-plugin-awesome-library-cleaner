@@ -5,7 +5,6 @@ A Jellyfin plugin to automatically manage and clean your media libraries based o
 ## Requirements
 
 - **Jellyfin Version**: 10.11.2 or later
-- **.NET**: .NET 9.0 runtime
 
 ## Features
 
